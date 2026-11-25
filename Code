@@ -1,0 +1,250 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define FILE_NAME "attendance.dat"
+#define MIN_ATTENDANCE 75.0
+
+typedef struct {
+    int rollNo;
+    char name[50];
+    int totalClasses;
+    int attendedClasses;
+} Student;
+
+// Function Prototypes
+void addStudent();
+void markAttendance();
+void analyzeAttendance();
+void searchStudent();
+float calculatePercentage(int attended, int total);
+void clearInputBuffer();
+
+int main() {
+    int choice;
+
+    while (1) {
+        printf("\n==========================================\n");
+        printf("      STUDENT ATTENDANCE ANALYZER\n");
+        printf("==========================================\n");
+        printf("1. Add New Student\n");
+        printf("2. Mark Today's Attendance (All Students)\n");
+        printf("3. View Attendance Analysis Report\n");
+        printf("4. Search Student by Roll Number\n");
+        printf("5. Exit\n");
+        printf("------------------------------------------\n");
+        printf("Enter your choice: ");
+
+        if (scanf("%d", &choice) != 1) {
+            printf("Invalid input! Please enter a number.\n");
+            clearInputBuffer();
+            continue;
+        }
+        clearInputBuffer();
+
+        switch (choice) {
+            case 1:
+                addStudent();
+                break;
+            case 2:
+                markAttendance();
+                break;
+            case 3:
+                analyzeAttendance();
+                break;
+            case 4:
+                searchStudent();
+                break;
+            case 5:
+                printf("Exiting program. Data saved in '%s'.\n", FILE_NAME);
+                exit(0);
+            default:
+                printf("Invalid choice! Try again.\n");
+        }
+    }
+    return 0;
+}
+
+// Helper to prevent newline issues with fgets/scanf
+void clearInputBuffer() {
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+}
+
+// Helper to compute attendance percentage safely
+float calculatePercentage(int attended, int total) {
+    if (total == 0) return 0.0f;
+    return ((float)attended / total) * 100.0f;
+}
+
+// 1. Append a new student record to the binary file
+void addStudent() {
+    FILE *fp = fopen(FILE_NAME, "ab+");
+    if (!fp) {
+        perror("Error opening file");
+        return;
+    }
+
+    Student s, temp;
+    printf("\nEnter Roll Number: ");
+    scanf("%d", &s.rollNo);
+    clearInputBuffer();
+
+    // Check for duplicate roll number
+    rewind(fp);
+    while (fread(&temp, sizeof(Student), 1, fp) == 1) {
+        if (temp.rollNo == s.rollNo) {
+            printf("Error: Roll Number %d already exists!\n", s.rollNo);
+            fclose(fp);
+            return;
+        }
+    }
+
+    printf("Enter Student Name: ");
+    fgets(s.name, sizeof(s.name), stdin);
+    s.name[strcspn(s.name, "\n")] = '\0'; // Remove trailing newline
+
+    printf("Enter Initial Total Classes Held: ");
+    scanf("%d", &s.totalClasses);
+    printf("Enter Initial Classes Attended: ");
+    scanf("%d", &s.attendedClasses);
+    clearInputBuffer();
+
+    if (s.attendedClasses > s.totalClasses || s.totalClasses < 0 || s.attendedClasses < 0) {
+        printf("Error: Invalid class counts!\n");
+        fclose(fp);
+        return;
+    }
+
+    fwrite(&s, sizeof(Student), 1, fp);
+    fclose(fp);
+    printf("Student '%s' added successfully!\n", s.name);
+}
+
+// 2. Update attendance records in-place using r+b mode
+void markAttendance() {
+    FILE *fp = fopen(FILE_NAME, "r+b");
+    if (!fp) {
+        printf("\nNo records found! Please add students first.\n");
+        return;
+    }
+
+    Student s;
+    char status;
+    int count = 0;
+
+    printf("\n--- Mark Attendance (P = Present, A = Absent) ---\n");
+    while (fread(&s, sizeof(Student), 1, fp) == 1) {
+        count++;
+        while (1) {
+            printf("Roll %d (%s): ", s.rollNo, s.name);
+            scanf(" %c", &status);
+            clearInputBuffer();
+
+            if (status == 'P' || status == 'p') {
+                s.totalClasses++;
+                s.attendedClasses++;
+                break;
+            } else if (status == 'A' || status == 'a') {
+                s.totalClasses++;
+                break;
+            } else {
+                printf("  Invalid input! Enter 'P' or 'A'.\n");
+            }
+        }
+
+        // Move file pointer back one record to overwrite it
+        fseek(fp, -(long)sizeof(Student), SEEK_CUR);
+        fwrite(&s, sizeof(Student), 1, fp);
+        fflush(fp); // Ensure write completes before next read
+    }
+
+    if (count == 0) {
+        printf("No students in database.\n");
+    } else {
+        printf("Attendance updated for %d student(s)!\n", count);
+    }
+    fclose(fp);
+}
+
+// 3. Analyze attendance across all students
+void analyzeAttendance() {
+    FILE *fp = fopen(FILE_NAME, "rb");
+    if (!fp) {
+        printf("\nNo records found! Please add students first.\n");
+        return;
+    }
+
+    Student s;
+    int totalStudents = 0, defaulters = 0;
+    float sumPercentage = 0.0f;
+
+    printf("\n========================================================================\n");
+    printf("%-8s %-22s %-10s %-10s %-10s %-12s\n", 
+           "Roll", "Name", "Attended", "Total", "Percent", "Status");
+    printf("------------------------------------------------------------------------\n");
+
+    while (fread(&s, sizeof(Student), 1, fp) == 1) {
+        float pct = calculatePercentage(s.attendedClasses, s.totalClasses);
+        totalStudents++;
+        sumPercentage += pct;
+
+        const char *status = (pct >= MIN_ATTENDANCE) ? "ELIGIBLE" : "SHORTAGE (!)";
+        if (pct < MIN_ATTENDANCE) defaulters++;
+
+        printf("%-8d %-22s %-10d %-10d %6.2f%%    %-12s\n",
+               s.rollNo, s.name, s.attendedClasses, s.totalClasses, pct, status);
+    }
+
+    printf("========================================================================\n");
+    if (totalStudents > 0) {
+        printf("Total Students     : %d\n", totalStudents);
+        printf("Class Average      : %.2f%%\n", sumPercentage / totalStudents);
+        printf("Shortage (<%.0f%%)    : %d student(s)\n", MIN_ATTENDANCE, defaulters);
+    } else {
+        printf("No student records available.\n");
+    }
+    fclose(fp);
+}
+
+// 4. Search for a specific student and calculate classes needed for 75%
+void searchStudent() {
+    FILE *fp = fopen(FILE_NAME, "rb");
+    if (!fp) {
+        printf("\nNo records found!\n");
+        return;
+    }
+
+    int targetRoll, found = 0;
+    Student s;
+
+    printf("\nEnter Roll Number to search: ");
+    scanf("%d", &targetRoll);
+    clearInputBuffer();
+
+    while (fread(&s, sizeof(Student), 1, fp) == 1) {
+        if (s.rollNo == targetRoll) {
+            found = 1;
+            float pct = calculatePercentage(s.attendedClasses, s.totalClasses);
+            printf("\n--- Student Details ---\n");
+            printf("Roll No   : %d\n", s.rollNo);
+            printf("Name      : %s\n", s.name);
+            printf("Attendance: %d / %d (%.2f%%)\n", s.attendedClasses, s.totalClasses, pct);
+
+            if (pct >= MIN_ATTENDANCE) {
+                printf("Status    : Eligible for exams.\n");
+            } else {
+                // Formula: (attended + x) / (total + x) >= 0.75  =>  x >= 3*total - 4*attended
+                int classesNeeded = (3 * s.totalClasses) - (4 * s.attendedClasses);
+                printf("Status    : Shortage! Must attend the next %d consecutive class(es) to reach 75%%.\n",
+                       classesNeeded > 0 ? classesNeeded : 1);
+            }
+            break;
+        }
+    }
+
+    if (!found) {
+        printf("Student with Roll Number %d not found.\n", targetRoll);
+    }
+    fclose(fp);
+}
