@@ -1,250 +1,291 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
+#include <stdlib.h>
 
-#define FILE_NAME "attendance.dat"
-#define MIN_ATTENDANCE 75.0
-
-typedef struct {
-    int rollNo;
+struct Student {
+    int roll;
     char name[50];
-    int totalClasses;
-    int attendedClasses;
-} Student;
+    int total_classes;
+    int attended_classes;
+    float percentage;
+    char status[15];
+};
 
-// Function Prototypes
-void addStudent();
-void markAttendance();
-void analyzeAttendance();
-void searchStudent();
-float calculatePercentage(int attended, int total);
-void clearInputBuffer();
+int isValidNumber(char str[]) {
+    int len = strlen(str);
+    if (len == 0) return 0;
+    for (int i = 0; i < len; i++) {
+        if (!isdigit((unsigned char)str[i])) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int isValidName(char str[]) {
+    int len = strlen(str);
+    int hasLetter = 0;
+    if (len == 0) return 0;
+    for (int i = 0; i < len; i++) {
+        if (isalpha((unsigned char)str[i])) {
+            hasLetter = 1;
+        } else if (str[i] != ' ') {
+            return 0;
+        }
+    }
+    return hasLetter;
+}
+
+void saveToFile(struct Student students[], int count) {
+    FILE *fp = fopen("attendance.txt", "w");
+    if (fp != NULL) {
+        fprintf(fp, "%-10s %-24s\t%-10s %-10s %-12s %-10s\n", "Roll_No", "Name", "Total", "Attended", "Attendance", "Status");
+        fprintf(fp, "--------------------------------------------------------------------------------\n");
+        for (int i = 0; i < count; i++) {
+            fprintf(fp, "%-10d %-24s\t%-10d %-10d %-11.2f%% %-10s\n",
+                    students[i].roll,
+                    students[i].name,
+                    students[i].total_classes,
+                    students[i].attended_classes,
+                    students[i].percentage,
+                    students[i].status);
+        }
+        fclose(fp);
+    } else {
+        printf("Error saving to file.\n");
+    }
+}
 
 int main() {
+    struct Student students[100];
+    int count = 0;
+    int initial_total_classes = 0;
     int choice;
+    char input[100];
+
+    FILE *fp = fopen("attendance.txt", "r");
+    if (fp != NULL) {
+        char line[256];
+        fgets(line, sizeof(line), fp);
+        fgets(line, sizeof(line), fp);
+        while (fgets(line, sizeof(line), fp) != NULL) {
+            if (sscanf(line, "%d %49[^\t] %d %d %f%% %14s",
+                       &students[count].roll,
+                       students[count].name,
+                       &students[count].total_classes,
+                       &students[count].attended_classes,
+                       &students[count].percentage,
+                       students[count].status) == 6) {
+                int len = strlen(students[count].name);
+                while (len > 0 && students[count].name[len - 1] == ' ') {
+                    students[count].name[--len] = '\0';
+                }
+                count++;
+            }
+        }
+        fclose(fp);
+    }
+
+    if (count > 0) {
+        initial_total_classes = students[0].total_classes;
+        printf("Loaded %d existing records (Total Classes Held: %d).\n", count, initial_total_classes);
+    } else {
+        while (1) {
+            printf("Enter Total Classes Held: ");
+            scanf(" %99[^\n]", input);
+            if (isValidNumber(input) && atoi(input) > 0) {
+                initial_total_classes = atoi(input);
+                break;
+            }
+            printf("Error: Total classes must contain only digits and be greater than 0.\n");
+        }
+    }
 
     while (1) {
-        printf("\n==========================================\n");
-        printf("      STUDENT ATTENDANCE ANALYZER\n");
-        printf("==========================================\n");
-        printf("1. Add New Student\n");
-        printf("2. Mark Today's Attendance (All Students)\n");
-        printf("3. View Attendance Analysis Report\n");
-        printf("4. Search Student by Roll Number\n");
-        printf("5. Exit\n");
-        printf("------------------------------------------\n");
-        printf("Enter your choice: ");
+        printf("\n1. Add Student Attendance\n");
+        printf("2. View All Records\n");
+        printf("3. Edit Student Details\n");
+        printf("4. Exit\n");
+        printf("Enter choice: ");
+        scanf(" %99[^\n]", input);
 
-        if (scanf("%d", &choice) != 1) {
-            printf("Invalid input! Please enter a number.\n");
-            clearInputBuffer();
+        if (!isValidNumber(input)) {
+            printf("Error: Choice must be a valid number.\n");
             continue;
         }
-        clearInputBuffer();
+        choice = atoi(input);
 
-        switch (choice) {
-            case 1:
-                addStudent();
-                break;
-            case 2:
-                markAttendance();
-                break;
-            case 3:
-                analyzeAttendance();
-                break;
-            case 4:
-                searchStudent();
-                break;
-            case 5:
-                printf("Exiting program. Data saved in '%s'.\n", FILE_NAME);
-                exit(0);
-            default:
-                printf("Invalid choice! Try again.\n");
-        }
-    }
-    return 0;
-}
-
-// Helper to prevent newline issues with fgets/scanf
-void clearInputBuffer() {
-    int c;
-    while ((c = getchar()) != '\n' && c != EOF);
-}
-
-// Helper to compute attendance percentage safely
-float calculatePercentage(int attended, int total) {
-    if (total == 0) return 0.0f;
-    return ((float)attended / total) * 100.0f;
-}
-
-// 1. Append a new student record to the binary file
-void addStudent() {
-    FILE *fp = fopen(FILE_NAME, "ab+");
-    if (!fp) {
-        perror("Error opening file");
-        return;
-    }
-
-    Student s, temp;
-    printf("\nEnter Roll Number: ");
-    scanf("%d", &s.rollNo);
-    clearInputBuffer();
-
-    // Check for duplicate roll number
-    rewind(fp);
-    while (fread(&temp, sizeof(Student), 1, fp) == 1) {
-        if (temp.rollNo == s.rollNo) {
-            printf("Error: Roll Number %d already exists!\n", s.rollNo);
-            fclose(fp);
-            return;
-        }
-    }
-
-    printf("Enter Student Name: ");
-    fgets(s.name, sizeof(s.name), stdin);
-    s.name[strcspn(s.name, "\n")] = '\0'; // Remove trailing newline
-
-    printf("Enter Initial Total Classes Held: ");
-    scanf("%d", &s.totalClasses);
-    printf("Enter Initial Classes Attended: ");
-    scanf("%d", &s.attendedClasses);
-    clearInputBuffer();
-
-    if (s.attendedClasses > s.totalClasses || s.totalClasses < 0 || s.attendedClasses < 0) {
-        printf("Error: Invalid class counts!\n");
-        fclose(fp);
-        return;
-    }
-
-    fwrite(&s, sizeof(Student), 1, fp);
-    fclose(fp);
-    printf("Student '%s' added successfully!\n", s.name);
-}
-
-// 2. Update attendance records in-place using r+b mode
-void markAttendance() {
-    FILE *fp = fopen(FILE_NAME, "r+b");
-    if (!fp) {
-        printf("\nNo records found! Please add students first.\n");
-        return;
-    }
-
-    Student s;
-    char status;
-    int count = 0;
-
-    printf("\n--- Mark Attendance (P = Present, A = Absent) ---\n");
-    while (fread(&s, sizeof(Student), 1, fp) == 1) {
-        count++;
-        while (1) {
-            printf("Roll %d (%s): ", s.rollNo, s.name);
-            scanf(" %c", &status);
-            clearInputBuffer();
-
-            if (status == 'P' || status == 'p') {
-                s.totalClasses++;
-                s.attendedClasses++;
-                break;
-            } else if (status == 'A' || status == 'a') {
-                s.totalClasses++;
-                break;
-            } else {
-                printf("  Invalid input! Enter 'P' or 'A'.\n");
+        if (choice == 1) {
+            if (count >= 100) {
+                printf("Database full.\n");
+                continue;
             }
-        }
 
-        // Move file pointer back one record to overwrite it
-        fseek(fp, -(long)sizeof(Student), SEEK_CUR);
-        fwrite(&s, sizeof(Student), 1, fp);
-        fflush(fp); // Ensure write completes before next read
-    }
-
-    if (count == 0) {
-        printf("No students in database.\n");
-    } else {
-        printf("Attendance updated for %d student(s)!\n", count);
-    }
-    fclose(fp);
-}
-
-// 3. Analyze attendance across all students
-void analyzeAttendance() {
-    FILE *fp = fopen(FILE_NAME, "rb");
-    if (!fp) {
-        printf("\nNo records found! Please add students first.\n");
-        return;
-    }
-
-    Student s;
-    int totalStudents = 0, defaulters = 0;
-    float sumPercentage = 0.0f;
-
-    printf("\n========================================================================\n");
-    printf("%-8s %-22s %-10s %-10s %-10s %-12s\n", 
-           "Roll", "Name", "Attended", "Total", "Percent", "Status");
-    printf("------------------------------------------------------------------------\n");
-
-    while (fread(&s, sizeof(Student), 1, fp) == 1) {
-        float pct = calculatePercentage(s.attendedClasses, s.totalClasses);
-        totalStudents++;
-        sumPercentage += pct;
-
-        const char *status = (pct >= MIN_ATTENDANCE) ? "ELIGIBLE" : "SHORTAGE (!)";
-        if (pct < MIN_ATTENDANCE) defaulters++;
-
-        printf("%-8d %-22s %-10d %-10d %6.2f%%    %-12s\n",
-               s.rollNo, s.name, s.attendedClasses, s.totalClasses, pct, status);
-    }
-
-    printf("========================================================================\n");
-    if (totalStudents > 0) {
-        printf("Total Students     : %d\n", totalStudents);
-        printf("Class Average      : %.2f%%\n", sumPercentage / totalStudents);
-        printf("Shortage (<%.0f%%)    : %d student(s)\n", MIN_ATTENDANCE, defaulters);
-    } else {
-        printf("No student records available.\n");
-    }
-    fclose(fp);
-}
-
-// 4. Search for a specific student and calculate classes needed for 75%
-void searchStudent() {
-    FILE *fp = fopen(FILE_NAME, "rb");
-    if (!fp) {
-        printf("\nNo records found!\n");
-        return;
-    }
-
-    int targetRoll, found = 0;
-    Student s;
-
-    printf("\nEnter Roll Number to search: ");
-    scanf("%d", &targetRoll);
-    clearInputBuffer();
-
-    while (fread(&s, sizeof(Student), 1, fp) == 1) {
-        if (s.rollNo == targetRoll) {
-            found = 1;
-            float pct = calculatePercentage(s.attendedClasses, s.totalClasses);
-            printf("\n--- Student Details ---\n");
-            printf("Roll No   : %d\n", s.rollNo);
-            printf("Name      : %s\n", s.name);
-            printf("Attendance: %d / %d (%.2f%%)\n", s.attendedClasses, s.totalClasses, pct);
-
-            if (pct >= MIN_ATTENDANCE) {
-                printf("Status    : Eligible for exams.\n");
-            } else {
-                // Formula: (attended + x) / (total + x) >= 0.75  =>  x >= 3*total - 4*attended
-                int classesNeeded = (3 * s.totalClasses) - (4 * s.attendedClasses);
-                printf("Status    : Shortage! Must attend the next %d consecutive class(es) to reach 75%%.\n",
-                       classesNeeded > 0 ? classesNeeded : 1);
+            while (1) {
+                printf("Enter Roll Number: ");
+                scanf(" %99[^\n]", input);
+                if (isValidNumber(input)) {
+                    students[count].roll = atoi(input);
+                    break;
+                }
+                printf("Error: Roll number must contain only digits (no alphabets or symbols).\n");
             }
+
+            while (1) {
+                printf("Enter Full Name: ");
+                scanf(" %49[^\n]", students[count].name);
+                if (isValidName(students[count].name)) {
+                    break;
+                }
+                printf("Error: Name must contain only alphabets and spaces (no numbers or symbols).\n");
+            }
+
+            students[count].total_classes = initial_total_classes;
+
+            while (1) {
+                printf("Enter Classes Attended (out of %d): ", initial_total_classes);
+                scanf(" %99[^\n]", input);
+                if (!isValidNumber(input)) {
+                    printf("Error: Classes attended must contain only digits (no alphabets or symbols).\n");
+                    continue;
+                }
+                int att = atoi(input);
+                if (att > initial_total_classes) {
+                    printf("Error: Classes attended cannot exceed Total Classes Held (%d).\n", initial_total_classes);
+                    continue;
+                }
+                students[count].attended_classes = att;
+                break;
+            }
+
+            students[count].percentage = ((float)students[count].attended_classes / students[count].total_classes) * 100.0f;
+
+            if (students[count].percentage >= 75.0f) {
+                strcpy(students[count].status, "Eligible");
+            } else {
+                strcpy(students[count].status, "Short");
+            }
+
+            count++;
+            saveToFile(students, count);
+            printf("Saved! %s: %.2f%% (%s)\n", students[count - 1].name, students[count - 1].percentage, students[count - 1].status);
+        } 
+        else if (choice == 2) {
+            if (count == 0) {
+                printf("No records found.\n");
+            } else {
+                printf("\n%-10s %-24s %-10s %-10s %-12s %-10s\n", "Roll_No", "Name", "Total", "Attended", "Attendance", "Status");
+                printf("--------------------------------------------------------------------------------\n");
+                for (int i = 0; i < count; i++) {
+                    printf("%-10d %-24s %-10d %-10d %-11.2f%% %-10s\n",
+                           students[i].roll,
+                           students[i].name,
+                           students[i].total_classes,
+                           students[i].attended_classes,
+                           students[i].percentage,
+                           students[i].status);
+                }
+            }
+        } 
+        else if (choice == 3) {
+            if (count == 0) {
+                printf("No records available to edit.\n");
+                continue;
+            }
+
+            int target_roll;
+            while (1) {
+                printf("Enter Roll Number to edit: ");
+                scanf(" %99[^\n]", input);
+                if (isValidNumber(input)) {
+                    target_roll = atoi(input);
+                    break;
+                }
+                printf("Error: Roll number must contain only digits.\n");
+            }
+
+            int found_idx = -1;
+            for (int i = 0; i < count; i++) {
+                if (students[i].roll == target_roll) {
+                    found_idx = i;
+                    break;
+                }
+            }
+
+            if (found_idx == -1) {
+                printf("Student with Roll Number %d not found.\n", target_roll);
+                continue;
+            }
+
+            printf("\nCurrent Details -> Name: %s | Attended: %d/%d | Attendance: %.2f%% (%s)\n",
+                   students[found_idx].name,
+                   students[found_idx].attended_classes,
+                   students[found_idx].total_classes,
+                   students[found_idx].percentage,
+                   students[found_idx].status);
+
+            int edit_choice;
+            while (1) {
+                printf("What would you like to edit?\n");
+                printf("1. Edit Name\n");
+                printf("2. Edit Classes Attended\n");
+                printf("3. Edit Both\n");
+                printf("Enter choice: ");
+                scanf(" %99[^\n]", input);
+                if (isValidNumber(input)) {
+                    edit_choice = atoi(input);
+                    if (edit_choice >= 1 && edit_choice <= 3) break;
+                }
+                printf("Error: Please enter 1, 2, or 3.\n");
+            }
+
+            if (edit_choice == 1 || edit_choice == 3) {
+                while (1) {
+                    printf("Enter New Full Name: ");
+                    scanf(" %49[^\n]", students[found_idx].name);
+                    if (isValidName(students[found_idx].name)) {
+                        break;
+                    }
+                    printf("Error: Name must contain only alphabets and spaces.\n");
+                }
+            }
+
+            if (edit_choice == 2 || edit_choice == 3) {
+                while (1) {
+                    printf("Enter New Classes Attended (out of %d): ", students[found_idx].total_classes);
+                    scanf(" %99[^\n]", input);
+                    if (!isValidNumber(input)) {
+                        printf("Error: Classes attended must contain only digits.\n");
+                        continue;
+                    }
+                    int att = atoi(input);
+                    if (att > students[found_idx].total_classes) {
+                        printf("Error: Classes attended cannot exceed Total Classes Held (%d).\n", students[found_idx].total_classes);
+                        continue;
+                    }
+                    students[found_idx].attended_classes = att;
+                    break;
+                }
+            }
+
+            students[found_idx].percentage = ((float)students[found_idx].attended_classes / students[found_idx].total_classes) * 100.0f;
+            if (students[found_idx].percentage >= 75.0f) {
+                strcpy(students[found_idx].status, "Eligible");
+            } else {
+                strcpy(students[found_idx].status, "Short");
+            }
+
+            saveToFile(students, count);
+            printf("Updated! %s: %.2f%% (%s)\n", students[found_idx].name, students[found_idx].percentage, students[found_idx].status);
+        }
+        else if (choice == 4) {
             break;
+        } 
+        else {
+            printf("Invalid choice.\n");
         }
     }
 
-    if (!found) {
-        printf("Student with Roll Number %d not found.\n", targetRoll);
-    }
-    fclose(fp);
+    return 0;
 }
