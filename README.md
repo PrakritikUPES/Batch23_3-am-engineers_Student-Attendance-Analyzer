@@ -63,8 +63,7 @@ A console-based Student Attendance Management System written in C that calculate
 * **Structures (`struct Student`):** Groups heterogeneous data types (`int`, `char[]`, `float`) representing a single student entity into a cohesive record.
 * **Arrays of Structures (`struct Student students[100]`):** Stores and manages up to 100 student records in memory.
 * **File Handling (`FILE *`, `fopen`, `fgets`, `fprintf`, `fclose`):** Reads existing data on startup and writes formatted tabular output to `attendance.txt`.
-* **String Manipulation & Parsing (`<string.h>`, `sscanf`, `strcpy`, `strlen`):** Parses multi-word names up to tab delimiters (`%49[^\t]`), trims trailing padding spaces, and assigns status strings.
-* **Character Classification & Conversion (`<ctype.h>`, `<stdlib.h>`, `isdigit`, `isalpha`, `atoi`):** Validates raw string inputs character-by-character before converting numeric strings to integers.
+* **Character Classification & Conversion (`<ctype.h>`, `<stdlib.h>`,):** Validates raw string inputs character-by-character before converting numeric strings to integers.
 * **Functions & Modular Design:** Separates validation (`isValidNumber`, `isValidName`) and persistence (`saveToFile`) into reusable functions.
 * **Type Casting & Formatted I/O:** Uses explicit `(float)` casting to prevent integer division truncation and width specifiers (`%-10d`, `%-24s`, `%-11.2f%%`) for column alignment.
 
