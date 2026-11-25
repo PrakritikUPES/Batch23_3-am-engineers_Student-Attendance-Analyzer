@@ -1,5 +1,5 @@
 # Hackathon
-Hackathon by 3am engineers
+Team Name = 3am engineers
 
 Batch = 23
 
